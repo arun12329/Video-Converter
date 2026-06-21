@@ -10,6 +10,9 @@
     larger videos keep their resolution. Already-converted files are skipped,
     and original files are never modified.
 
+    The script prints a configuration banner before it starts, per-file size
+    and timing while it works, and a size/savings summary at the end.
+
 .PARAMETER Folder
     Path to the folder containing the source videos.
 
@@ -41,6 +44,25 @@ param(
 $invariant = [System.Globalization.CultureInfo]::InvariantCulture
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+function Format-Size([double]$Bytes) {
+    $sign = ''
+    if ($Bytes -lt 0) { $sign = '-'; $Bytes = -$Bytes }
+    if ($Bytes -ge 1GB) { return ('{0}{1:N2} GB' -f $sign, ($Bytes / 1GB)) }
+    if ($Bytes -ge 1MB) { return ('{0}{1:N2} MB' -f $sign, ($Bytes / 1MB)) }
+    if ($Bytes -ge 1KB) { return ('{0}{1:N2} KB' -f $sign, ($Bytes / 1KB)) }
+    return ('{0}{1} B' -f $sign, [long]$Bytes)
+}
+
+# Percentage smaller the output is vs the input (positive = saved space).
+function Get-SavedPercent([double]$In, [double]$Out) {
+    if ($In -le 0) { return 0 }
+    return [math]::Round((1 - ($Out / $In)) * 100)
+}
+
+# ---------------------------------------------------------------------------
 # Validate input folder
 # ---------------------------------------------------------------------------
 
@@ -56,37 +78,46 @@ if (-not (Test-Path -LiteralPath $Folder -PathType Container)) {
 $ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
 
 if (-not $ffmpegCmd) {
-    Write-Error "FFmpeg not found. Install it and add it to your PATH."
+    Write-Host ""
+    Write-Host "ERROR: FFmpeg was not found on your PATH." -ForegroundColor Red
+    Write-Host "Install it from https://ffmpeg.org/download.html and add it to PATH,"
+    Write-Host "then reopen the terminal and run this script again."
     exit 1
 }
 
-$ffmpeg = $ffmpegCmd.Source
+$ffmpeg        = $ffmpegCmd.Source
+$ffmpegVersion = (& $ffmpeg -version 2>$null | Select-Object -First 1)
 
 # ---------------------------------------------------------------------------
 # Choose encoder (NVENC when an NVIDIA GPU is present, else libx265)
 # ---------------------------------------------------------------------------
 
+$gpuName  = $null
 $useNvenc = $false
 
 try {
-    $useNvenc = [bool](
-        Get-CimInstance Win32_VideoController -ErrorAction Stop |
-            Where-Object { $_.Name -match 'NVIDIA' }
-    )
+    $nvidia = Get-CimInstance Win32_VideoController -ErrorAction Stop |
+        Where-Object { $_.Name -match 'NVIDIA' } |
+        Select-Object -First 1
+
+    if ($nvidia) {
+        $useNvenc = $true
+        $gpuName  = $nvidia.Name
+    }
 }
 catch {
     $useNvenc = $false
 }
 
 if ($useNvenc) {
-    Write-Host "NVIDIA GPU detected -> using hardware encoder (hevc_nvenc)."
-    $videoCodec  = 'hevc_nvenc'
-    $codecParams = @('-preset', 'p6', '-cq', '20')
+    $encoderLabel = "hevc_nvenc (GPU: $gpuName)"
+    $videoCodec   = 'hevc_nvenc'
+    $codecParams  = @('-preset', 'p6', '-cq', '20')
 }
 else {
-    Write-Host "No NVIDIA GPU detected -> using CPU encoder (libx265)."
-    $videoCodec  = 'libx265'
-    $codecParams = @('-crf', '23', '-preset', 'medium')
+    $encoderLabel = 'libx265 (CPU)'
+    $videoCodec   = 'libx265'
+    $codecParams  = @('-crf', '23', '-preset', 'medium')
 }
 
 # ---------------------------------------------------------------------------
@@ -161,7 +192,30 @@ $files = @(
     }
 )
 
-if ($files.Count -eq 0) {
+$total           = $files.Count
+$totalInputBytes = ($files | Measure-Object -Property Length -Sum).Sum
+if (-not $totalInputBytes) { $totalInputBytes = 0 }
+
+# ---------------------------------------------------------------------------
+# Configuration banner
+# ---------------------------------------------------------------------------
+
+Write-Host ""
+Write-Host "============================================================"
+Write-Host "  Universal Video Converter"
+Write-Host "============================================================"
+Write-Host ("  FFmpeg  : {0}" -f $ffmpeg)
+Write-Host ("  Version : {0}" -f $ffmpegVersion)
+Write-Host ("  Encoder : {0}" -f $encoderLabel)
+Write-Host ("  Source  : {0}" -f $Folder)
+Write-Host ("  Output  : {0}" -f $outputFolder)
+Write-Host ("  Rotate  : {0} deg" -f $Rotate)
+Write-Host ("  Speed   : {0}x" -f $Speed)
+Write-Host ("  Videos  : {0} file(s), total {1}" -f $total, (Format-Size $totalInputBytes))
+Write-Host "============================================================"
+
+if ($total -eq 0) {
+    Write-Host ""
     Write-Host "No video files found in: $Folder"
     exit 0
 }
@@ -170,11 +224,14 @@ if ($files.Count -eq 0) {
 # Convert
 # ---------------------------------------------------------------------------
 
-$total     = $files.Count
-$count     = 0
-$converted = 0
-$skipped   = 0
-$failed    = 0
+$count                = 0
+$converted            = 0
+$skipped              = 0
+$failed               = 0
+$convertedInputBytes  = [long]0
+$convertedOutputBytes = [long]0
+
+$runStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 foreach ($file in $files) {
 
@@ -185,13 +242,13 @@ foreach ($file in $files) {
     )
 
     if (Test-Path -LiteralPath $outputFile) {
-        Write-Host "[$count/$total] Skipping (already converted): $($file.Name)"
+        Write-Host ("[{0}/{1}] Skipping (already converted): {2}" -f $count, $total, $file.Name)
         $skipped++
         continue
     }
 
     Write-Host ""
-    Write-Host "[$count/$total] Processing: $($file.Name)"
+    Write-Host ("[{0}/{1}] Processing: {2}  ({3})" -f $count, $total, $file.Name, (Format-Size $file.Length))
 
     $ffmpegArgs = @(
         '-hide_banner',
@@ -214,14 +271,26 @@ foreach ($file in $files) {
         $outputFile
     )
 
+    $fileStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     & $ffmpeg @ffmpegArgs
+    $fileStopwatch.Stop()
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  -> Done."
+        $outLen = (Get-Item -LiteralPath $outputFile).Length
+        $saved  = Get-SavedPercent $file.Length $outLen
+
+        Write-Host ("  -> Done in {0}.  {1} -> {2} (saved {3}%)" -f `
+            $fileStopwatch.Elapsed.ToString('hh\:mm\:ss'),
+            (Format-Size $file.Length),
+            (Format-Size $outLen),
+            $saved)
+
+        $convertedInputBytes  += $file.Length
+        $convertedOutputBytes += $outLen
         $converted++
     }
     else {
-        Write-Host "  -> FAILED (ffmpeg exit code $LASTEXITCODE)."
+        Write-Host ("  -> FAILED (ffmpeg exit code {0})." -f $LASTEXITCODE)
         # Remove the partial output so a re-run will retry this file.
         if (Test-Path -LiteralPath $outputFile) {
             Remove-Item -LiteralPath $outputFile -Force -ErrorAction SilentlyContinue
@@ -230,15 +299,28 @@ foreach ($file in $files) {
     }
 }
 
+$runStopwatch.Stop()
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 
 Write-Host ""
-Write-Host "====================================="
-Write-Host "Completed"
-Write-Host "  Converted: $converted"
-Write-Host "  Skipped:   $skipped"
-Write-Host "  Failed:    $failed"
-Write-Host "  Output:    $outputFolder"
-Write-Host "====================================="
+Write-Host "============================================================"
+Write-Host "  Completed"
+Write-Host ("  Converted  : {0}" -f $converted)
+Write-Host ("  Skipped    : {0}" -f $skipped)
+Write-Host ("  Failed     : {0}" -f $failed)
+
+if ($converted -gt 0) {
+    $savedBytes   = $convertedInputBytes - $convertedOutputBytes
+    $savedPercent = Get-SavedPercent $convertedInputBytes $convertedOutputBytes
+
+    Write-Host ("  Input size : {0}" -f (Format-Size $convertedInputBytes))
+    Write-Host ("  Output size: {0}" -f (Format-Size $convertedOutputBytes))
+    Write-Host ("  Space saved: {0} ({1}%)" -f (Format-Size $savedBytes), $savedPercent)
+}
+
+Write-Host ("  Total time : {0}" -f $runStopwatch.Elapsed.ToString('hh\:mm\:ss'))
+Write-Host ("  Output dir : {0}" -f $outputFolder)
+Write-Host "============================================================"

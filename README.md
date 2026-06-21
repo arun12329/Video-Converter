@@ -15,6 +15,7 @@ falls back to **CPU encoding** otherwise. Originals are never touched.
 
 - [Highlights](#highlights)
 - [Quick start](#quick-start)
+- [Sample output](#sample-output)
 - [Options](#options)
 - [Examples](#examples)
 - [How it works](#how-it-works)
@@ -38,7 +39,8 @@ falls back to **CPU encoding** otherwise. Originals are never touched.
 | ♻️ | Skips files that are already converted — safe to re-run |
 | 🛡️ | Never modifies or deletes originals |
 | 🚀 | `+faststart` for instant web/streaming playback |
-| 📊 | Prints a converted / skipped / failed summary at the end |
+| 📋 | Prints a config banner up front: FFmpeg path/version, encoder + GPU name, counts and total size |
+| 📊 | Live per-file size & timing, plus a final converted / skipped / failed summary with total space saved |
 
 ---
 
@@ -71,6 +73,42 @@ falls back to **CPU encoding** otherwise. Originals are never touched.
    ```bash
    ./convert-videos.sh -f /home/user/videos
    ```
+
+---
+
+## Sample output
+
+```text
+============================================================
+  Universal Video Converter
+============================================================
+  FFmpeg  : C:\ffmpeg\bin\ffmpeg.exe
+  Version : ffmpeg version 8.1.1-full_build ...
+  Encoder : hevc_nvenc (GPU: NVIDIA GeForce GTX 1650 SUPER)
+  Source  : D:\Videos
+  Output  : D:\Videos\converted-videos
+  Rotate  : 0 deg
+  Speed   : 1x
+  Videos  : 12 file(s), total 4.30 GB
+============================================================
+
+[1/12] Processing: holiday.mov  (412.80 MB)
+  -> Done in 0:01:23.  412.80 MB -> 188.05 MB (saved 54%)
+
+...
+
+============================================================
+  Completed
+  Converted  : 11
+  Skipped    : 1
+  Failed     : 0
+  Input size : 3.98 GB
+  Output size: 1.71 GB
+  Space saved: 2.27 GB (57%)
+  Total time : 0:18:44
+  Output dir : D:\Videos\converted-videos
+============================================================
+```
 
 ---
 
