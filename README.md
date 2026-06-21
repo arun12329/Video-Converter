@@ -1,336 +1,165 @@
-# Universal Video Converter (PowerShell & Bash)
+# Universal Video Converter
 
-## Features
+Batch-convert a folder of videos to **MP4 (HEVC / H.265)** with a single command.
+Comes in two flavors that behave identically:
 
-This project converts videos from multiple formats into MP4 using HEVC (H.265).
+- **`Convert-Videos.ps1`** — PowerShell, for Windows
+- **`convert-videos.sh`** — Bash, for Linux
 
-### Supported Formats
-
-* MP4
-* MOV
-* AVI
-* MKV
-* WMV
-* FLV
-* WEBM
-* MPEG
-* MPG
-* M4V
-* 3GP
-* TS
-* MTS
-* M2TS
-
-### Features
-
-✅ Convert all supported video formats to MP4
-
-✅ HEVC / H.265 encoding
-
-✅ Automatic NVIDIA GPU detection
-
-✅ Uses NVIDIA NVENC when available
-
-✅ Automatically falls back to CPU encoding if NVIDIA is unavailable
-
-✅ Upscales videos below 1080p to 1080p
-
-✅ Keeps original resolution for videos larger than 1080p (1440p, 4K, 8K, etc.)
-
-✅ Optional video rotation
-
-✅ Optional video speed increase
-
-✅ Creates a `converted-videos` folder automatically
-
-✅ Skips files that have already been converted
-
-✅ Prevents filename collisions
-
-✅ Optimized MP4 output using Fast Start
+The converter automatically uses your **NVIDIA GPU** (NVENC) when available and
+falls back to **CPU encoding** otherwise. Originals are never touched.
 
 ---
 
-# Requirements
+## Contents
 
-## Windows
-
-### Install FFmpeg
-
-Download FFmpeg and add it to your PATH.
-
-Verify installation:
-
-```powershell
-ffmpeg -version
-```
-
-### Run PowerShell Script
-
-```powershell
-.\Convert-Videos.ps1 -Folder "D:\Videos"
-```
+- [Highlights](#highlights)
+- [Quick start](#quick-start)
+- [Options](#options)
+- [Examples](#examples)
+- [How it works](#how-it-works)
+- [Output layout](#output-layout)
+- [Supported input formats](#supported-input-formats)
+- [Notes & limitations](#notes--limitations)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## Linux
+## Highlights
 
-The Bash version automatically attempts to install FFmpeg if it is not present.
-
-Supported package managers:
-
-* apt
-* dnf
-* yum
-* zypper
-* pacman
-
-Make executable:
-
-```bash
-chmod +x convert-videos.sh
-```
-
-Run:
-
-```bash
-./convert-videos.sh -f /home/user/videos
-```
+| | Feature |
+|---|---|
+| 🎞️ | Converts 14 common formats to a single MP4 (HEVC) output |
+| ⚡ | Automatic **NVIDIA NVENC** hardware encoding when a GPU is detected |
+| 🧠 | Falls back to **libx265** CPU encoding automatically |
+| 📐 | Upscales sub-1080p videos to 1080p; leaves 1080p/1440p/4K/8K untouched |
+| 🔄 | Optional rotation (90° / 180° / 270°) |
+| ⏩ | Optional speed-up (audio pitch-corrected via chained `atempo`) |
+| ♻️ | Skips files that are already converted — safe to re-run |
+| 🛡️ | Never modifies or deletes originals |
+| 🚀 | `+faststart` for instant web/streaming playback |
+| 📊 | Prints a converted / skipped / failed summary at the end |
 
 ---
 
-# Basic Usage
+## Quick start
 
-## Windows
+### Windows (PowerShell)
+
+1. [Install FFmpeg](https://ffmpeg.org/download.html) and add it to your `PATH`, then confirm:
+
+   ```powershell
+   ffmpeg -version
+   ```
+
+2. Run the script against a folder:
+
+   ```powershell
+   .\Convert-Videos.ps1 -Folder "D:\Videos"
+   ```
+
+### Linux (Bash)
+
+1. Make the script executable:
+
+   ```bash
+   chmod +x convert-videos.sh
+   ```
+
+2. Run it (FFmpeg is auto-installed if missing — see [Notes](#notes--limitations)):
+
+   ```bash
+   ./convert-videos.sh -f /home/user/videos
+   ```
+
+---
+
+## Options
+
+| Action | PowerShell | Bash | Default |
+|---|---|---|---|
+| Source folder (required) | `-Folder <path>` | `-f <path>` | — |
+| Rotation | `-Rotate 0\|90\|180\|270` | `-r 0\|90\|180\|270` | `0` |
+| Speed-up factor | `-Speed <number ≥ 1>` | `-s <number ≥ 1>` | `1` |
+| Help | `Get-Help .\Convert-Videos.ps1` | `-h` | — |
+
+---
+
+## Examples
+
+> Replace the paths with your own. The Bash equivalent is shown beneath each
+> PowerShell command.
+
+**Convert a folder (no changes beyond re-encoding):**
 
 ```powershell
 .\Convert-Videos.ps1 -Folder "D:\Videos"
 ```
-
-## Linux
-
 ```bash
 ./convert-videos.sh -f /home/user/videos
 ```
 
----
-
-# Rotation Options
-
-## Rotate 90°
-
-### Windows
+**Rotate 90° clockwise:**
 
 ```powershell
-.\Convert-Videos.ps1 `
--Folder "D:\Videos" `
--Rotate 90
+.\Convert-Videos.ps1 -Folder "D:\Videos" -Rotate 90
 ```
-
-### Linux
-
 ```bash
-./convert-videos.sh \
--f /home/user/videos \
--r 90
+./convert-videos.sh -f /home/user/videos -r 90
 ```
 
----
-
-## Rotate 180°
-
-### Windows
+**Make a 20× timelapse (video + pitch-corrected audio):**
 
 ```powershell
-.\Convert-Videos.ps1 `
--Folder "D:\Videos" `
--Rotate 180
+.\Convert-Videos.ps1 -Folder "D:\Videos" -Speed 20
 ```
-
-### Linux
-
 ```bash
-./convert-videos.sh \
--f /home/user/videos \
--r 180
+./convert-videos.sh -f /home/user/videos -s 20
 ```
 
----
-
-## Rotate 270°
-
-### Windows
+**Combine rotation and speed:**
 
 ```powershell
-.\Convert-Videos.ps1 `
--Folder "D:\Videos" `
--Rotate 270
+.\Convert-Videos.ps1 -Folder "D:\Videos" -Rotate 90 -Speed 10
 ```
-
-### Linux
-
 ```bash
-./convert-videos.sh \
--f /home/user/videos \
--r 270
+./convert-videos.sh -f /home/user/videos -r 90 -s 10
 ```
 
 ---
 
-# Speed Options
+## How it works
 
-## 2x Speed
+**Encoder selection**
 
-### Windows
+| Condition | Video codec | Quality settings |
+|---|---|---|
+| NVIDIA GPU detected | `hevc_nvenc` | `-preset p6 -cq 20` |
+| No NVIDIA GPU | `libx265` | `-crf 23 -preset medium` |
 
-```powershell
-.\Convert-Videos.ps1 `
--Folder "D:\Videos" `
--Speed 2
-```
+Audio is always re-encoded to **AAC @ 192 kbps**.
 
-### Linux
+**Resolution policy** — videos are upscaled to 1080p only when *both* dimensions
+are below 1080p; anything 1080p or larger keeps its native resolution. Output
+dimensions are forced to even numbers (required by HEVC).
 
-```bash
-./convert-videos.sh \
--f /home/user/videos \
--s 2
-```
+| Original resolution | Output |
+|---|---|
+| 640×480, 1280×720 | Upscaled to 1080p |
+| 1920×1080, 2560×1440 | Kept |
+| 3840×2160 (4K), 7680×4320 (8K) | Kept |
 
----
-
-## 5x Speed
-
-### Windows
-
-```powershell
-.\Convert-Videos.ps1 `
--Folder "D:\Videos" `
--Speed 5
-```
-
-### Linux
-
-```bash
-./convert-videos.sh \
--f /home/user/videos \
--s 5
-```
+**Speed-up** — `atempo` is capped at 2× per instance, so the requested factor is
+decomposed into a chain whose product matches it. For example, `-Speed 5`
+produces `atempo=2,atempo=2,atempo=1.25`, keeping audio in sync and pitch-correct.
 
 ---
 
-## 10x Speed
+## Output layout
 
-### Windows
-
-```powershell
-.\Convert-Videos.ps1 `
--Folder "D:\Videos" `
--Speed 10
-```
-
-### Linux
-
-```bash
-./convert-videos.sh \
--f /home/user/videos \
--s 10
-```
-
----
-
-## 20x Speed
-
-### Windows
-
-```powershell
-.\Convert-Videos.ps1 `
--Folder "D:\Videos" `
--Speed 20
-```
-
-### Linux
-
-```bash
-./convert-videos.sh \
--f /home/user/videos \
--s 20
-```
-
----
-
-# Rotation + Speed Example
-
-### Windows
-
-```powershell
-.\Convert-Videos.ps1 `
--Folder "D:\Videos" `
--Rotate 90 `
--Speed 10
-```
-
-### Linux
-
-```bash
-./convert-videos.sh \
--f /home/user/videos \
--r 90 \
--s 10
-```
-
----
-
-# Resolution Behavior
-
-| Original Resolution | Output Resolution |
-| ------------------- | ----------------- |
-| 640×480             | Upscaled          |
-| 1280×720            | Upscaled          |
-| 1920×1080           | Kept              |
-| 2560×1440           | Kept              |
-| 3840×2160 (4K)      | Kept              |
-| 7680×4320 (8K)      | Kept              |
-
----
-
-# GPU Acceleration
-
-If an NVIDIA GPU is detected:
-
-```text
-HEVC NVENC
-```
-
-is used automatically.
-
-Benefits:
-
-* Much faster encoding
-* Lower CPU usage
-* Ideal for large video collections
-
-If NVIDIA is not available:
-
-```text
-libx265
-```
-
-CPU encoding is used automatically.
-
----
-
-# Output Folder
-
-Converted files are stored in:
-
-```text
-converted-videos
-```
-
-inside the source folder.
-
-Example:
+Converted files are written to a `converted-videos` subfolder inside the source
+folder. The original extension is folded into the filename to avoid collisions
+(e.g. `clip.mov` and `clip.avi` won't overwrite each other):
 
 ```text
 Videos/
@@ -343,46 +172,35 @@ Videos/
 
 ---
 
-# Notes
+## Supported input formats
 
-* Original files are never modified.
-* Existing converted files are skipped.
-* Output files use MP4 container format.
-* Audio is encoded as AAC.
-* Video is encoded as HEVC/H.265.
-* The script does not process subfolders unless recursive support is added.
-* The script does not delete original files.
+`mp4` · `avi` · `mov` · `mkv` · `wmv` · `flv` · `webm` · `mpeg` · `mpg` ·
+`m4v` · `3gp` · `ts` · `mts` · `m2ts`
+
+Extension matching is case-insensitive (`.MP4` and `.mp4` are both picked up).
 
 ---
 
-# Examples
+## Notes & limitations
 
-Convert normally:
+- **Originals are safe.** The scripts only read source files and write to the
+  `converted-videos` folder.
+- **Re-runnable.** Files that already exist in `converted-videos` are skipped, so
+  you can stop and resume. A failed conversion deletes its partial output so the
+  next run retries it.
+- **Top-level only.** Subfolders are not processed recursively.
+- **Linux auto-install.** If FFmpeg is missing, the Bash script tries to install
+  it via `apt`, `dnf`, `yum`, `zypper`, or `pacman` using `sudo`. Install FFmpeg
+  yourself beforehand if you'd rather not grant that.
 
-```text
-Windows:
-.\Convert-Videos.ps1 -Folder "D:\Videos"
+---
 
-Linux:
-./convert-videos.sh -f /home/user/videos
-```
+## Troubleshooting
 
-Convert and rotate:
-
-```text
-Windows:
-.\Convert-Videos.ps1 -Folder "D:\Videos" -Rotate 90
-
-Linux:
-./convert-videos.sh -f /home/user/videos -r 90
-```
-
-Create a 20x timelapse:
-
-```text
-Windows:
-.\Convert-Videos.ps1 -Folder "D:\Videos" -Speed 20
-
-Linux:
-./convert-videos.sh -f /home/user/videos -s 20
-```
+| Symptom | Fix |
+|---|---|
+| `FFmpeg not found` (Windows) | Install FFmpeg and add its `bin` folder to `PATH`, then reopen the terminal. |
+| `running scripts is disabled` (Windows) | Allow the script: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then re-run. |
+| `Permission denied` (Linux) | Make it executable: `chmod +x convert-videos.sh`. |
+| GPU not used | NVENC needs an NVIDIA GPU plus drivers (`nvidia-smi` must work on Linux). The script falls back to CPU automatically. |
+| A file shows `FAILED` | Check the FFmpeg output above the summary; the source file may be corrupt or use an unsupported codec. |
